@@ -28,11 +28,11 @@ class _RPN(nn.Module):
         self.RPN_Conv = nn.Conv2d(self.din, 512, 3, 1, 1, bias=True)
 
         # define bg/fg classifcation score layer
-        self.nc_score_out = len(self.anchor_scales) * len(self.anchor_ratios) * 2 # 2(bg/fg) * 9 (anchors)
+        self.nc_score_out = len(self.anchor_scales) * len(self.anchor_ratios) * 2  # 2(bg/fg) * 9 (anchors)
         self.RPN_cls_score = nn.Conv2d(512, self.nc_score_out, 1, 1, 0)
 
         # define anchor box offset prediction layer
-        self.nc_bbox_out = len(self.anchor_scales) * len(self.anchor_ratios) * 4 # 4(coords) * 9 (anchors)
+        self.nc_bbox_out = len(self.anchor_scales) * len(self.anchor_ratios) * 4  # 4(coords) * 9 (anchors)
         self.RPN_bbox_pred = nn.Conv2d(512, self.nc_bbox_out, 1, 1, 0)
 
         # define proposal layer
@@ -60,11 +60,11 @@ class _RPN(nn.Module):
         batch_size = base_feat.size(0)
 
         # return feature map after convrelu layer
-        rpn_conv1 = F.relu(self.RPN_Conv(base_feat), inplace=True)
+        rpn_conv1 = F.relu(self.RPN_Conv(base_feat), inplace=True)  # outsize: (bs, d, 512)
         # get rpn classification score
-        rpn_cls_score = self.RPN_cls_score(rpn_conv1)
+        rpn_cls_score = self.RPN_cls_score(rpn_conv1)  # outsize: (bs, d, anchors*2)
 
-        rpn_cls_score_reshape = self.reshape(rpn_cls_score, 2)
+        rpn_cls_score_reshape = self.reshape(rpn_cls_score, 2)  # outsize: (bs, 2, d', anchors*2)
         rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape, 1)
         rpn_cls_prob = self.reshape(rpn_cls_prob_reshape, self.nc_score_out)
 
@@ -74,6 +74,7 @@ class _RPN(nn.Module):
         # proposal layer
         cfg_key = 'TRAIN' if self.training else 'TEST'
 
+        # rois: (bs, rpn_post_topN, 5), last is idx in batch
         rois = self.RPN_proposal((rpn_cls_prob.data, rpn_bbox_pred.data,
                                  im_info, cfg_key))
 
@@ -91,7 +92,7 @@ class _RPN(nn.Module):
             rpn_label = rpn_data[0].view(batch_size, -1)
 
             rpn_keep = Variable(rpn_label.view(-1).ne(-1).nonzero().view(-1))
-            rpn_cls_score = torch.index_select(rpn_cls_score.view(-1,2), 0, rpn_keep)
+            rpn_cls_score = torch.index_select(rpn_cls_score.view(-1, 2), 0, rpn_keep)
             rpn_label = torch.index_select(rpn_label.view(-1), 0, rpn_keep.data)
             rpn_label = Variable(rpn_label.long())
             self.rpn_loss_cls = F.cross_entropy(rpn_cls_score, rpn_label)
@@ -104,7 +105,41 @@ class _RPN(nn.Module):
             rpn_bbox_outside_weights = Variable(rpn_bbox_outside_weights)
             rpn_bbox_targets = Variable(rpn_bbox_targets)
 
-            self.rpn_loss_box = _smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights,
-                                                            rpn_bbox_outside_weights, sigma=3, dim=[1,2,3])
+            self.rpn_loss_box = _smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights, 
+                                                rpn_bbox_outside_weights, sigma=3, dim=[1,2,3])
 
         return rois, self.rpn_loss_cls, self.rpn_loss_box
+
+# if __name__ == '__main__':
+# 
+#     def reshape(x, d):
+#         """ reshape output featuremap to (bs, d, spatial_size, channel) """
+#         input_shape = x.size()
+#         x = x.view(
+#             input_shape[0],
+#             int(d),
+#             int(float(input_shape[1] * input_shape[2]) / float(d)),
+#             input_shape[3]
+#         )
+#         return x
+# 
+#     dummy_feat = torch.randn(4, 2048, 37, 37)
+#     RPN_Conv = nn.Conv2d(2048, 512, 3, 1, 1, bias=True)
+#     RPN_cls_score = nn.Conv2d(512, 18, 1, 1, 0)
+#     RPN_bbox_pred = nn.Conv2d(512, 36, 1, 1, 0)
+# 
+#     rpn_conv1 = F.relu(RPN_Conv(dummy_feat), inplace=True)
+# 
+#     rpn_cls_score = RPN_cls_score(rpn_conv1)
+#     rpn_cls_score_reshape = reshape(rpn_cls_score, 2)
+#     rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape, 1)
+#     rpn_cls_prob = reshape(rpn_cls_prob_reshape, 18)
+# 
+#     rpn_box_prob = RPN_bbox_pred(rpn_conv1)
+# 
+#     print(rpn_conv1.shape)
+#     print(rpn_cls_score.shape)
+#     print(rpn_cls_score_reshape.shape)
+#     print(rpn_cls_prob_reshape.shape)
+#     print(rpn_cls_prob.shape)
+#     print(rpn_box_prob.shape)

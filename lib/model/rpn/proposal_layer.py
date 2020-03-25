@@ -47,7 +47,13 @@ class _ProposalLayer(nn.Module):
         #     top[1].reshape(1, 1, 1, 1)
 
     def forward(self, input):
-
+        """input: (rpn_cls_prob, rpn_bbox_pred, im_info, cfg_key)
+        H, W is spatial size of base feature map
+        rpn_cls_prob: (bs, num_anchors*2, H, W)
+        rpn_bbox_pred: (bs, num_anchors*4, H, W)
+        im_info:
+        cfg_key: train or test
+        """
         # Algorithm:
         #
         # for each (H, W) location i
@@ -60,7 +66,6 @@ class _ProposalLayer(nn.Module):
         # apply NMS with threshold 0.7 to remaining proposals
         # take after_nms_topN proposals after NMS
         # return the top proposals (-> RoIs top, scores top)
-
 
         # the first set of _num_anchors channels are bg probs
         # the second set are the fg probs
