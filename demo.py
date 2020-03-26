@@ -23,7 +23,8 @@ import torch.optim as optim
 
 import torchvision.transforms as transforms
 import torchvision.datasets as dset
-from scipy.misc import imread
+# from scipy.misc import imread
+import PIL.Image as Image
 from roi_data_layer.roidb import combined_roidb
 from roi_data_layer.roibatchLoader import roibatchLoader
 from model.utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
@@ -262,7 +263,8 @@ if __name__ == '__main__':
       else:
         im_file = os.path.join(args.image_dir, imglist[num_images])
         # im = cv2.imread(im_file)
-        im_in = np.array(imread(im_file))
+        # im_in = np.array(imread(im_file))
+        im_in = np.array(Image.open(im_file))
       if len(im_in.shape) == 2:
         im_in = im_in[:,:,np.newaxis]
         im_in = np.concatenate((im_in,im_in,im_in), axis=2)
