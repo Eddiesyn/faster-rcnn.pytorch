@@ -288,62 +288,62 @@ if __name__ == '__main__':
                         box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS) \
                             + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS)
                     box_deltas = box_deltas.view(1, -1, 4 * len(classes))
-                pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
-                pred_boxes = clip_boxes(pred_boxes, im_info.data, 1)
+            pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
+            pred_boxes = clip_boxes(pred_boxes, im_info.data, 1)
+        else:
+            # Simply repeat the boxes, once for each class
+            pred_boxes = np.tile(boxes, (1, scores.shape[1]))
+
+        pred_boxes /= im_scales[0]
+
+        scores = scores.squeeze()
+        pred_boxes = pred_boxes.squeeze()
+        detect_meter.update(time.time() - det_tic)
+
+        im2show = np.copy(im)
+        misc_tic = time.time()
+        # for j in range(0, len(classes)):
+        #     inds = torch.nonzero(scores[:, j] > thresh).view(-1)
+        #     # if there is a det
+        #     if inds.numel() > 0:
+        #         cls_scores = scores[:, j][inds]
+        #         _, order = torch.sort(cls_scores, 0, True)
+        #         if args.class_agnostic:
+        #             cls_boxes = pred_boxes[inds, :]
+        #         else:
+        #             cls_boxes = pred_boxes[inds][:, j * 4: (j + 1) * 4]
+
+        #         cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
+        #         cls_dets = cls_dets[order]
+        #         keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
+        #         cls_dets = cls_dets[keep.view(-1).long()]
+        #         im2show = vis_detections(im2show, pascal_classes[j], cls_dets.cpu().numpy(), 0.5)
+
+        inds = torch.nonzero(scores[:, person_id] > thresh).view(-1)
+        # if there's a det
+        if inds.numel() > 0:
+            cls_scores = scores[:, person_id][inds]
+            _, order = torch.sort(cls_scores, 0, True)
+            if args.class_agnostic:
+                cls_boxes = pred_boxes[inds, :]
             else:
-                # Simply repeat the boxes, once for each class
-                pred_boxes = np.tile(boxes, (1, scores.shape[1]))
+                cls_boxes = pred_boxes[inds][:, person_id * 4: (person_id + 1) * 4]
+            cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
+            cls_dets = cls_dets[order]
+            keep = nms(cls_dets[order, :], cls_scores[order], cfg.TEST.NMS)
+            cls_dets = cls_dets[keep.view(-1).long()]
+            im2show = vis_detections(
+                im2show, classes[person_id], cls_dets.cpu().numpy(), 0.5)
 
-            pred_boxes /= im_scales[0]
+        nms_meter.update(time.time() - misc_tic)
 
-            scores = scores.squeeze()
-            pred_boxes = pred_boxes.squeeze()
-            detect_meter.update(time.time() - det_tic)
+        print('Frame {0}: {1} persons detected, detect time {det_meter.val:.3f}({det_meter.avg:.3f})\t'
+                'nms time {nms_meter.val:.3f}({nms_meter.avg:.3f})'.format(
+                    num_frame, len(cls_dets), det_meter=detect_meter, nms_meter=nms_meter
+                ))
 
-            im2show = np.copy(im)
-            misc_tic = time.time()
-            # for j in range(0, len(classes)):
-            #     inds = torch.nonzero(scores[:, j] > thresh).view(-1)
-            #     # if there is a det
-            #     if inds.numel() > 0:
-            #         cls_scores = scores[:, j][inds]
-            #         _, order = torch.sort(cls_scores, 0, True)
-            #         if args.class_agnostic:
-            #             cls_boxes = pred_boxes[inds, :]
-            #         else:
-            #             cls_boxes = pred_boxes[inds][:, j * 4: (j + 1) * 4]
-
-            #         cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
-            #         cls_dets = cls_dets[order]
-            #         keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
-            #         cls_dets = cls_dets[keep.view(-1).long()]
-            #         im2show = vis_detections(im2show, pascal_classes[j], cls_dets.cpu().numpy(), 0.5)
-
-            inds = torch.nonzero(scores[:, person_id] > thresh).view(-1)
-            # if there's a det
-            if inds.numel() > 0:
-                cls_scores = scores[:, person_id][inds]
-                _, order = torch.sort(cls_scores, 0, True)
-                if args.class_agnostic:
-                    cls_boxes = pred_boxes[inds, :]
-                else:
-                    cls_boxes = pred_boxes[inds][:, person_id * 4: (person_id + 1) * 4]
-                cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
-                cls_dets = cls_dets[order]
-                keep = nms(cls_dets[order, :], cls_scores[order], cfg.TEST.NMS)
-                cls_dets = cls_dets[keep.view(-1).long()]
-                im2show = vis_detections(
-                    im2show, classes[person_id], cls_dets.cpu().numpy(), 0.5)
-
-            nms_meter.update(time.time() - misc_tic)
-
-            print('Frame {0}: {1} persons detected, detect time {det_meter.val:.3f}({det_meter.avg:.3f})\t'
-                  'nms time {nms_meter.val:.3f}({nms_meter.avg:.3f})'.format(
-                      num_frame, len(cls_dets), det_meter=detect_meter, nms_meter=nms_meter
-                  ))
-
-            # print('writing frame_{}'.format(num_frame))
-            writer.write(im2show)
+        # print('writing frame_{}'.format(num_frame))
+        writer.write(im2show)
 
     print('Detection complete!')
     cap.release()
