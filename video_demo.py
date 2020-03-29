@@ -327,7 +327,7 @@ if __name__ == '__main__':
                 if args.class_agnostic:
                     cls_boxes = pred_boxes[inds, :]
                 else:
-                    cls_boxes = pred_boxes[inds][:, j * 4: (j + 1) * 4]
+                    cls_boxes = pred_boxes[inds][:, person_id * 4: (person_id + 1) * 4]
                 cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
                 cls_dets = cls_dets[order]
                 keep = nms(cls_dets[order, :], cls_scores[order], cfg.TEST.NMS)
