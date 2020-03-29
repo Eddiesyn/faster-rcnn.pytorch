@@ -1,7 +1,7 @@
 import os
 import time
 import argparse
-import numpy as np 
+import numpy as np
 import pprint
 import torch
 import cv2
@@ -21,24 +21,50 @@ from model.utils.net_utils import save_net, load_net, vis_detections
 from model.utils.blob import im_list_to_blob
 from model.faster_rcnn.vgg16 import vgg16
 from model.faster_rcnn.resnet import resnet
+from utils import AverageMeter
 
 
 def parse_args():
-    parser = argparse.ArgumentParser('Running faster-rcnn detection on video dataset')
+    parser = argparse.ArgumentParser(
+        'Running faster-rcnn detection on video dataset')
 
-    parser.add_argument('--dataset', default='pascal_voc', type=str)
+    parser.add_argument(
+        '--dataset',
+        default='pascal_voc',
+        type=str,
+        help='pascal_voc or coco')
+    parser.add_argument(
+        '--class_txt',
+        default='',
+        type=str,
+        help='a txt file listing class names')
     parser.add_argument('--cfg_file', default='cfgs/vgg16.yml', type=str)
     parser.add_argument('--net', default='res101', type=str)
-    parser.add_argument('--load_dir', help='directory to load models', type=str)
+    parser.add_argument(
+        '--load_dir',
+        help='directory to load models',
+        type=str)
     parser.add_argument('--cuda', action='store_true')
-    parser.add_argument('--cag', dest='class_agnostic', help='whether perform class_agnostic bbox regression', action='store_true')
+    parser.add_argument('--cag', dest='class_agnostic',
+                        help='whether perform class_agnostic bbox regression', action='store_true')
     parser.add_argument('--parallel_type',
                         help='which part of model to parallel, 0: all, 1: model before roi pool',
                         type=int, default=0)
-    parser.add_argument('--checksession', help='checksession to load model', default=1, type=int)
-    parser.add_argument('--checkepoch', help='checkepoch to load network', default=10021, type=int)
+    parser.add_argument(
+        '--checksession',
+        help='checksession to load model',
+        default=1,
+        type=int)
+    parser.add_argument(
+        '--checkepoch',
+        help='checkepoch to load network',
+        default=10021,
+        type=int)
     parser.add_argument('--bs', help='batch size', default=1, type=int)
-    parser.add_argument('--trained_model', help='path of trained model to use', type=str)
+    parser.add_argument(
+        '--trained_model',
+        help='path of trained model to use',
+        type=str)
     parser.add_argument('--video_path', type=str)
     parser.add_argument('--outdir', type=str)
 
@@ -70,13 +96,30 @@ def _get_image_blob(im):
         im_scale = float(target_size) / float(im_size_min)
         if np.round(im_scale * im_size_max) > cfg.TEST.MAX_SIZE:
             im_scale = float(cfg.TEST.MAX_SIZE) / float(im_size_max)
-        im = cv2.resize(im_orig, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR)
+        im = cv2.resize(
+            im_orig,
+            None,
+            None,
+            fx=im_scale,
+            fy=im_scale,
+            interpolation=cv2.INTER_LINEAR)
         im_scale_factors.append(im_scale)
         processed_ims.append(im)
 
     blob = im_list_to_blob(processed_ims)
 
     return blob, np.array(im_scale_factors)
+
+
+def read_class_from_txt(txt_file):
+    classes = []
+    with open(txt_file) as infile:
+        lines = infile.readlines()
+    for line in lines:
+        line = line.strip()
+        classes.append(line)
+
+    return classes
 
 
 if __name__ == '__main__':
@@ -94,29 +137,54 @@ if __name__ == '__main__':
     pprint.pprint(cfg)
     np.random.seed(cfg.RNG_SEED)
 
-    pascal_classes = np.asarray(['__background__',
-                        'aeroplane', 'bicycle', 'bird', 'boat',
-                        'bottle', 'bus', 'car', 'cat', 'chair',
-                        'cow', 'diningtable', 'dog', 'horse',
-                        'motorbike', 'person', 'pottedplant',
-                        'sheep', 'sofa', 'train', 'tvmonitor'])
+    """
+    # ============== pascal labels ======================
+    pascal_classes = np.asarray(['__background__', 'aeroplane', 'bicycle', 'bird', 'boat',
+                                 'bottle', 'bus', 'car', 'cat', 'chair',
+                                 'cow', 'diningtable', 'dog', 'horse',
+                                 'motorbike', 'person', 'pottedplant',
+                                 'sheep', 'sofa', 'train', 'tvmonitor'])
+
+    # ============== COCO labels ========================
+    coco_classes = np.asarray(['person', 'bicycle', 'car', 'motorcycle', 'airplane'])
+    """
+    if args.dataset == 'pascal_voc':
+        classes = np.asarray(['__background__', 'aeroplane', 'bicycle', 'bird', 'boat',
+                              'bottle', 'bus', 'car', 'cat', 'chair',
+                              'cow', 'diningtable', 'dog', 'horse',
+                              'motorbike', 'person', 'pottedplant',
+                              'sheep', 'sofa', 'train', 'tvmonitor'])
+        assert len(classes) == 20, 'Fatal Error, class number not correct!'
+        person_id = 14
+    else:
+        classes = np.asarray(read_class_from_txt(args.class_txt))
+        assert len(classes) == 80, 'Fatal Error, class number not correct!'
+        person_id = 0
 
     # initialize network
     if args.net == 'vgg16':
-        fasterRCNN = vgg16(pascal_classes, pretrained=False, class_agnostic=args.class_agnostic)
+        fasterRCNN = vgg16(
+            classes,
+            pretrained=False,
+            class_agnostic=args.class_agnostic)
     elif args.net == 'res101':
-        fasterRCNN = resnet(pascal_classes, 101, pretrained=False, class_agnostic=args.class_agnostic)
+        fasterRCNN = resnet(classes, 101, pretrained=False,
+                            class_agnostic=args.class_agnostic)
     elif args.net == 'res50':
-        fasterRCNN = resnet(pascal_classes, 50, pretrained=False, class_agnostic=args.class_agnostic)
+        fasterRCNN = resnet(classes, 50, pretrained=False,
+                            class_agnostic=args.class_agnostic)
     elif args.net == 'res152':
-        fasterRCNN = resnet(pascal_classes, 152, pretrained=False, class_agnostic=args.class_agnostic)
+        fasterRCNN = resnet(classes, 152, pretrained=False,
+                            class_agnostic=args.class_agnostic)
 
     fasterRCNN.create_architecture()
     print('load checkpoint {}'.format(args.trained_model))
     if args.cuda > 0:
         checkpoint = torch.load(args.trained_model)
     else:
-        checkpoint = torch.load(args.trained_model, map_location=(lambda storage, loc: storage))
+        checkpoint = torch.load(
+            args.trained_model, map_location=(
+                lambda storage, loc: storage))
     fasterRCNN.load_state_dict(checkpoint['model'])
     if 'pooling_mode' in checkpoint.keys():
         cfg.POOLING_MODE = checkpoint['pooling_mode']
@@ -144,11 +212,17 @@ if __name__ == '__main__':
     mas_per_image = 100
     thresh = 0.05
 
+    '''video writer'''
     cap = cv2.VideoCapture(args.video_path)
     frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     frame_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     output_vids = os.path.join(args.outdir, 'detected.avi')
-    writer = cv2.VideoWriter(output_vids, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 25, (int(frame_width), int(frame_height)))
+    writer = cv2.VideoWriter(output_vids, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 25,
+                             (int(frame_width), int(frame_height)))
+
+    '''meter'''
+    detect_meter = AverageMeter()
+    nms_meter = AverageMeter()
 
     print('Start detecting...')
     num_frame = 0
@@ -168,9 +242,10 @@ if __name__ == '__main__':
         im = im_in
 
         blobs, im_scales = _get_image_blob(im)
-        assert len(im_scales) == 1,  "Only single-image batch implementated"
+        assert len(im_scales) == 1, "Only single-image batch implementated"
         im_blob = blobs
-        im_info_np = np.array([[im_blob.shape[1], im_blob.shape[2], im_scales[0]]], dtype=np.float32)
+        im_info_np = np.array(
+            [[im_blob.shape[1], im_blob.shape[2], im_scales[0]]], dtype=np.float32)
 
         im_data_pt = torch.from_numpy(im_blob)
         im_data_pt = im_data_pt.permute(0, 3, 1, 2)  # (NCHW)
@@ -185,9 +260,9 @@ if __name__ == '__main__':
         det_tic = time.time()
 
         rois, cls_prob, bbox_pred, \
-        rpn_loss_cls, rpn_loss_box, \
-        RCNN_loss_cls, RCNN_loss_bbox, \
-        rois_label = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
+            rpn_loss_cls, rpn_loss_box, \
+            RCNN_loss_cls, RCNN_loss_bbox, \
+            rois_label = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
 
         scores = cls_prob.detach()
         boxes = rois.data[:, :, 1:5]
@@ -200,19 +275,19 @@ if __name__ == '__main__':
                 if args.class_agnostic:
                     if args.cuda > 0:
                         box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS).cuda() \
-                                + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).cuda()
+                            + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).cuda()
                     else:
                         box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS) \
-                                + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS)
+                            + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS)
                     box_deltas = box_deltas.view(1, -1, 4)
                 else:
                     if args.cuda > 0:
                         box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS).cuda() \
-                                + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).cuda()
+                            + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).cuda()
                     else:
                         box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS) \
-                                + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS)
-                    box_deltas = box_deltas.view(1, -1, 4 * len(pascal_classes))
+                            + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS)
+                    box_deltas = box_deltas.view(1, -1, 4 * len(classes))
                 pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
                 pred_boxes = clip_boxes(pred_boxes, im_info.data, 1)
             else:
@@ -223,33 +298,51 @@ if __name__ == '__main__':
 
             scores = scores.squeeze()
             pred_boxes = pred_boxes.squeeze()
-            det_toc = time.time()
-            detect_time = det_toc - det_tic
-            misc_tic = time.time()
+            detect_meter.update(time.time() - det_tic)
+
             im2show = np.copy(im)
-            for j in range(1, len(pascal_classes)):
-                inds = torch.nonzero(scores[:, j] > thresh).view(-1)
-                # if there is a det
-                if inds.numel() > 0:
-                    cls_scores = scores[:, j][inds]
-                    _, order = torch.sort(cls_scores, 0, True)
-                    if args.class_agnostic:
-                        cls_boxes = pred_boxes[inds, :]
-                    else:
-                        cls_boxes = pred_boxes[inds][:, j * 4 : (j + 1) * 4]
+            misc_tic = time.time()
+            # for j in range(0, len(classes)):
+            #     inds = torch.nonzero(scores[:, j] > thresh).view(-1)
+            #     # if there is a det
+            #     if inds.numel() > 0:
+            #         cls_scores = scores[:, j][inds]
+            #         _, order = torch.sort(cls_scores, 0, True)
+            #         if args.class_agnostic:
+            #             cls_boxes = pred_boxes[inds, :]
+            #         else:
+            #             cls_boxes = pred_boxes[inds][:, j * 4: (j + 1) * 4]
 
-                    cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
-                    cls_dets = cls_dets[order]
-                    keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
-                    cls_dets = cls_dets[keep.view(-1).long()]
-                    im2show = vis_detections(im2show, pascal_classes[j], cls_dets.cpu().numpy(), 0.5)
+            #         cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
+            #         cls_dets = cls_dets[order]
+            #         keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
+            #         cls_dets = cls_dets[keep.view(-1).long()]
+            #         im2show = vis_detections(im2show, pascal_classes[j], cls_dets.cpu().numpy(), 0.5)
 
-            misc_toc = time.time()
-            nms_time = misc_toc - misc_tic
+            inds = torch.nonzero(scores[:, person_id] > thresh).view(-1)
+            # if there's a det
+            if inds.numel() > 0:
+                cls_scores = scores[:, person_id][inds]
+                _, order = torch.sort(cls_scores, 0, True)
+                if args.class_agnostic:
+                    cls_boxes = pred_boxes[inds, :]
+                else:
+                    cls_boxes = pred_boxes[inds][:, j * 4: (j + 1) * 4]
+                cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
+                cls_dets = cls_dets[order]
+                keep = nms(cls_dets[order, :], cls_scores[order], cfg.TEST.NMS)
+                cls_dets = cls_dets[keep.view(-1).long()]
+                im2show = vis_detections(
+                    im2show, classes[person_id], cls_dets.cpu().numpy(), 0.5)
 
-            # result_path = os.path.join(args.outdir, 'frame_{}.jpg'.format(num_frame))
-            print('writing frame_{}'.format(num_frame))
-            # cv2.imwrite(result_path, im2show)
+            nms_meter.update(time.time() - misc_tic)
+
+            print('Frame {0}: {1} persons detected, detect time {det_meter.val:.3f}({det_meter.avg:.3f})\t'
+                  'nms time {nms_meter.val:.3f}({nms_meter.avg:.3f})'.format(
+                      num_frame, len(cls_dets), det_meter=detect_meter, nms_meter=nms_meter
+                  ))
+
+            # print('writing frame_{}'.format(num_frame))
             writer.write(im2show)
 
     print('Detection complete!')
