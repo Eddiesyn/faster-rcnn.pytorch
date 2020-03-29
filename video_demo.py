@@ -112,7 +112,7 @@ def _get_image_blob(im):
 
 
 def read_class_from_txt(txt_file):
-    classes = []
+    classes = ['__background__']
     with open(txt_file) as infile:
         lines = infile.readlines()
     for line in lines:
@@ -154,12 +154,12 @@ if __name__ == '__main__':
                               'cow', 'diningtable', 'dog', 'horse',
                               'motorbike', 'person', 'pottedplant',
                               'sheep', 'sofa', 'train', 'tvmonitor'])
-        assert len(classes) == 20, 'Fatal Error, class number not correct!'
-        person_id = 14
+        assert len(classes) == 21, 'Fatal Error, class number not correct!'
+        person_id = 15
     else:
         classes = np.asarray(read_class_from_txt(args.class_txt))
-        assert len(classes) == 80, 'Fatal Error, class number not correct!'
-        person_id = 0
+        assert len(classes) == 81, 'Fatal Error, class number not correct!'
+        person_id = 1
 
     # initialize network
     if args.net == 'vgg16':
