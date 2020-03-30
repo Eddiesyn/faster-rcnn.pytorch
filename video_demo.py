@@ -5,6 +5,7 @@ import numpy as np
 import pprint
 import torch
 import cv2
+import pdb
 
 import torchvision.transforms as transforms
 import torchvision.datasets as dset
@@ -67,6 +68,7 @@ def parse_args():
         type=str)
     parser.add_argument('--video_path', type=str)
     parser.add_argument('--outdir', type=str)
+    parser.add_argument('--txt_file', type=str)
 
     args = parser.parse_args()
 
@@ -157,7 +159,7 @@ if __name__ == '__main__':
         assert len(classes) == 21, 'Fatal Error, class number not correct!'
         person_id = 15
     else:
-        classes = np.asarray(read_class_from_txt(args.class_txt))
+        classes = np.asarray(read_class_from_txt(args.txt_file))
         assert len(classes) == 81, 'Fatal Error, class number not correct!'
         person_id = 1
 
@@ -210,14 +212,14 @@ if __name__ == '__main__':
 
     start = time.time()
     mas_per_image = 100
-    thresh = 0.05
+    thresh = 0.5
 
     '''video writer'''
     cap = cv2.VideoCapture(args.video_path)
     frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     frame_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     output_vids = os.path.join(args.outdir, 'detected.avi')
-    writer = cv2.VideoWriter(output_vids, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 25,
+    writer = cv2.VideoWriter(output_vids, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 5,
                              (int(frame_width), int(frame_height)))
 
     '''meter'''
@@ -302,7 +304,9 @@ if __name__ == '__main__':
 
         im2show = np.copy(im)
         misc_tic = time.time()
-        # for j in range(0, len(classes)):
+        # for j in range(1, len(classes)):
+        #     if j == person_id:
+        #         pdb.set_trace()
         #     inds = torch.nonzero(scores[:, j] > thresh).view(-1)
         #     # if there is a det
         #     if inds.numel() > 0:
@@ -317,9 +321,12 @@ if __name__ == '__main__':
         #         cls_dets = cls_dets[order]
         #         keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
         #         cls_dets = cls_dets[keep.view(-1).long()]
-        #         im2show = vis_detections(im2show, pascal_classes[j], cls_dets.cpu().numpy(), 0.5)
+        #         if j == person_id:
+        #             person_nums = cls_dets.shape[0]
+        #             im2show = vis_detections(im2show, classes[j], cls_dets.cpu().numpy(), 0.5)
 
         inds = torch.nonzero(scores[:, person_id] > thresh).view(-1)
+        # pdb.set_trace()
         # if there's a det
         if inds.numel() > 0:
             cls_scores = scores[:, person_id][inds]
@@ -330,16 +337,19 @@ if __name__ == '__main__':
                 cls_boxes = pred_boxes[inds][:, person_id * 4: (person_id + 1) * 4]
             cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
             cls_dets = cls_dets[order]
-            keep = nms(cls_dets[order, :], cls_scores[order], cfg.TEST.NMS)
+            keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
             cls_dets = cls_dets[keep.view(-1).long()]
+            person_nums = cls_dets.shape[0]
             im2show = vis_detections(
                 im2show, classes[person_id], cls_dets.cpu().numpy(), 0.5)
+        else:
+            person_nums = 0
 
         nms_meter.update(time.time() - misc_tic)
 
         print('Frame {0}: {1} persons detected, detect time {det_meter.val:.3f}({det_meter.avg:.3f})\t'
                 'nms time {nms_meter.val:.3f}({nms_meter.avg:.3f})'.format(
-                    num_frame, len(cls_dets), det_meter=detect_meter, nms_meter=nms_meter
+                    num_frame, person_nums, det_meter=detect_meter, nms_meter=nms_meter
                 ))
 
         # print('writing frame_{}'.format(num_frame))
