@@ -29,24 +29,28 @@ def parse_args():
     parser = argparse.ArgumentParser(
         'Running faster-rcnn detection on video dataset')
 
-    parser.add_argument(
-        '--dataset',
-        default='pascal_voc',
-        type=str,
-        help='pascal_voc or coco')
-    parser.add_argument(
-        '--class_txt',
-        default='',
-        type=str,
-        help='a txt file listing class names')
-    parser.add_argument('--cfg_file', default='cfgs/vgg16.yml', type=str)
-    parser.add_argument('--net', default='res101', type=str)
-    parser.add_argument(
-        '--load_dir',
-        help='directory to load models',
-        type=str)
+    parser.add_argument('--dataset',
+                        default='pascal_voc',
+                        type=str,
+                        help='pascal_voc or coco')
+    parser.add_argument('--class_txt',
+                        default='',
+                        type=str,
+                        help='a txt file listing class names')
+    parser.add_argument('--cfg_file',
+                        default='cfgs/vgg16.yml', 
+                        type=str,
+                        help='optional config file')
+    parser.add_argument('--net',
+                        default='res101',
+                        type=str,
+                        help='vgg16, res50, res101, res152')
+    parser.add_argument('--load_dir',
+                        help='directory to load models',
+                        type=str)
     parser.add_argument('--cuda', action='store_true')
-    parser.add_argument('--cag', dest='class_agnostic',
+    parser.add_argument('--cag',
+                        dest='class_agnostic',
                         help='whether perform class_agnostic bbox regression', action='store_true')
     parser.add_argument('--parallel_type',
                         help='which part of model to parallel, 0: all, 1: model before roi pool',
@@ -151,6 +155,8 @@ if __name__ == '__main__':
     coco_classes = np.asarray(['person', 'bicycle', 'car', 'motorcycle', 'airplane'])
     """
     if args.dataset == 'pascal_voc':
+        cfg.ANCHOR_SCALES = [8, 16, 32]
+        cfg.ANCHOR_RATIOS = [0.5, 1, 2]
         classes = np.asarray(['__background__', 'aeroplane', 'bicycle', 'bird', 'boat',
                               'bottle', 'bus', 'car', 'cat', 'chair',
                               'cow', 'diningtable', 'dog', 'horse',
@@ -159,6 +165,8 @@ if __name__ == '__main__':
         assert len(classes) == 21, 'Fatal Error, class number not correct!'
         person_id = 15
     else:
+        cfg.ANCHOR_SCALES = [4, 8, 16, 32]
+        cfg.ANCHOR_RATIOS = [0.5, 1, 2]
         classes = np.asarray(read_class_from_txt(args.txt_file))
         assert len(classes) == 81, 'Fatal Error, class number not correct!'
         person_id = 1
