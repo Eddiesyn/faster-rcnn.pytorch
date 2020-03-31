@@ -222,19 +222,31 @@ if __name__ == '__main__':
     mas_per_image = 100
     thresh = 0.5
 
+    src_root = '/data1/kinetics-600'
+    dst_root = './outs/kinetics600'
+
     '''video writer'''
     cap = cv2.VideoCapture(args.video_path)
-    frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    frame_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-    output_vids = os.path.join(args.outdir, 'detected.avi')
-    writer = cv2.VideoWriter(output_vids, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 5,
-                             (int(frame_width), int(frame_height)))
+    vids_name = os.path.basename(args.video_path)
+    vids_name = os.path.splitext(vids_name)[0]
+    out_txt = os.path.join(args.outsdir, vids_name+'.txt')
+    # frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    # frame_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    # output_vids = os.path.join(args.outdir, 'detected.avi')
+    # writer = cv2.VideoWriter(output_vids, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 5,
+    #                          (int(frame_width), int(frame_height)))
+    # actions = os.listdir(src_root)
 
     '''meter'''
     detect_meter = AverageMeter()
     nms_meter = AverageMeter()
 
     print('Start detecting...')
+    # for action_idx, action in enumerate(actions):
+    #     print('\nAction {}: {}'.format(action_idx, action))
+
+    infile = open(out_txt)
+    lines = ""
     num_frame = 0
     while(cap.isOpened()):
         ret, frame = cap.read()
@@ -310,32 +322,13 @@ if __name__ == '__main__':
         pred_boxes = pred_boxes.squeeze()
         detect_meter.update(time.time() - det_tic)
 
-        im2show = np.copy(im)
+        # im2show = np.copy(im)
         misc_tic = time.time()
-        # for j in range(1, len(classes)):
-        #     if j == person_id:
-        #         pdb.set_trace()
-        #     inds = torch.nonzero(scores[:, j] > thresh).view(-1)
-        #     # if there is a det
-        #     if inds.numel() > 0:
-        #         cls_scores = scores[:, j][inds]
-        #         _, order = torch.sort(cls_scores, 0, True)
-        #         if args.class_agnostic:
-        #             cls_boxes = pred_boxes[inds, :]
-        #         else:
-        #             cls_boxes = pred_boxes[inds][:, j * 4: (j + 1) * 4]
-
-        #         cls_dets = torch.cat((cls_boxes, cls_scores.unsqueeze(1)), 1)
-        #         cls_dets = cls_dets[order]
-        #         keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
-        #         cls_dets = cls_dets[keep.view(-1).long()]
-        #         if j == person_id:
-        #             person_nums = cls_dets.shape[0]
-        #             im2show = vis_detections(im2show, classes[j], cls_dets.cpu().numpy(), 0.5)
 
         inds = torch.nonzero(scores[:, person_id] > thresh).view(-1)
         # pdb.set_trace()
         # if there's a det
+        bbox = [str(num_frame)]
         if inds.numel() > 0:
             cls_scores = scores[:, person_id][inds]
             _, order = torch.sort(cls_scores, 0, True)
@@ -348,10 +341,16 @@ if __name__ == '__main__':
             keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
             cls_dets = cls_dets[keep.view(-1).long()]
             person_nums = cls_dets.shape[0]
-            im2show = vis_detections(
-                im2show, classes[person_id], cls_dets.cpu().numpy(), 0.5)
+            # im2show = vis_detections(
+            #     im2show, classes[person_id], cls_dets.cpu().numpy(), 0.5)
+            for i in range(0, len(person_nums)):
+                # bbox = tuple(int(np.round(x)) for x in cls_dets[i, :4])
+                bbox += list(str(int(np.round(x))) for x in cls_dets[i, :4])
         else:
             person_nums = 0
+
+        lines += ",".join(bx for bx in bbox)
+        lines += '\n'
 
         nms_meter.update(time.time() - misc_tic)
 
@@ -361,8 +360,10 @@ if __name__ == '__main__':
                 ))
 
         # print('writing frame_{}'.format(num_frame))
-        writer.write(im2show)
+        # writer.write(im2show)
 
+    infile.writelines(lines)
+    infile.close()
     print('Detection complete!')
     cap.release()
-    writer.release()
+    # writer.release()
