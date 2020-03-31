@@ -246,6 +246,11 @@ if __name__ == '__main__':
     for action_idx, action in enumerate(actions):
         print('\nAction {}: {}'.format(action_idx + 1, action))
         video_files = os.listdir(os.path.join(src_root, action))
+
+        if not os.path.exists(os.path.join(args.outdir, action)):
+            os.makedirs(os.path.join(args.outdir, action))
+        outpath = os.path.join(args.outdir, action)
+
         print('{} videos in total'.format(len(video_files)))
 
         for video_idx, video in enumerate(video_files):
@@ -254,7 +259,7 @@ if __name__ == '__main__':
 
             '''writer'''
             cap = cv2.VideoCapture(os.path.join(src_root, action, video))
-            out_txt = os.path.join(args.outdir, video_name + '.txt')
+            out_txt = os.path.join(outpath, video_name + '.txt')
             infile = open(out_txt, 'w')
             lines = ""
             num_frame = 0
